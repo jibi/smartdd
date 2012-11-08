@@ -150,8 +150,7 @@ src_reader(int fd_src, int d2s_r, int s2d_w, int dr_ctl_r) {
 
 			if (ctl == 'e') {
 				dr_running = 0;
-				printf
-				    ("[+] quitting smart mode at block: %d\n",
+				printf("[+] quitting smart mode at block: %d\n",
 				     blocks);
 			} else {
 
@@ -161,8 +160,7 @@ src_reader(int fd_src, int d2s_r, int s2d_w, int dr_ctl_r) {
 				diff = false;
 				for (int i = 0; i < count; i++) {
 					if (buf_src[i] != buf_dst[i]) {
-						printf
-						    ("[+] diff at block: %d\n",
+						printf("[+] diff at block: %d\n",
 						     blocks);
 						diff = true;
 						break;
