@@ -1,7 +1,7 @@
 smartdd
 =============
 
-just like dd, but smarter: it copies only blocks that differs to increase flash
+just like dd, but smarter: it copies only blocks that differ to increase flash
 life.
 
 Usage
