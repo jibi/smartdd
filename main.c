@@ -48,7 +48,7 @@ enum pipes {
 
 char *src, *dst;
 unsigned int bs;
-char smart_mode;
+char smart_mode, show_progress;
 char null_char;
 
 void
@@ -129,11 +129,10 @@ src_reader(int fd_src, int d2s_buf_r, int d2s_ctl_w,
     int s2d_ctl_r, int s2d_buf_w) {
 
 	char *buf_src, *buf_dst;
-
-	int blocks;
+	ssize_t blocks;
 	ssize_t count, count2;
-	int dr_running = 1;
 
+	int dr_running = 1;
 
 	buf_src = malloc(bs * sizeof(char));
 	buf_dst = malloc(bs * sizeof(char));
@@ -151,12 +150,12 @@ src_reader(int fd_src, int d2s_buf_r, int d2s_ctl_w,
 
 			if (count != count2) {
 				dr_running = 0;
-				printf("[+] quitting smart mode at block: %d\n", blocks);
+				printf("[+] quitting smart mode at block: %d\n", (int) blocks);
 			} else {
 				diff = false;
-				for (int i = 0; i < count; i++) {
+				for (ssize_t i = 0; i < count; i++) {
 					if (buf_src[i] != buf_dst[i]) {
-						printf("[+] diff at block: %d\n", blocks);
+						printf("[+] diff at block: %d\n", (int) blocks);
 						diff = true;
 						break;
 					}
@@ -169,7 +168,7 @@ src_reader(int fd_src, int d2s_buf_r, int d2s_ctl_w,
 			read(s2d_ctl_r, &null_char, sizeof(char));
 
 			/* tell dst writer process current block */
-			write(s2d_buf_w, &blocks, sizeof(int));
+			write(s2d_buf_w, &blocks, sizeof(ssize_t));
 			write(s2d_buf_w, buf_src, count);
 		}
 		blocks++;
@@ -192,14 +191,14 @@ dst_reader(int fd_dst, int d2s_ctl_r, int d2s_buf_w) {
 
 void
 dst_writer(int fd_src, int fd_dst, int s2d_buf_r, int s2d_ctl_w) {
-	int block;
+	ssize_t block;
 	struct stat stat_src, stat_dst;
 
 	while (1) {
 		write(s2d_ctl_w, &null_char, sizeof(char));
 
 		/* read current block */
-		if (read(s2d_buf_r, &block, sizeof(int)) <= 0) break;
+		if (read(s2d_buf_r, &block, sizeof(ssize_t)) <= 0) break;
 		lseek(fd_dst, block * bs, SEEK_SET);
 
 		/* move block from s2d pipe to dst file */
