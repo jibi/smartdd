@@ -19,9 +19,11 @@
 #include <unistd.h>
 #include <string.h>
 #include <fcntl.h>
+#include <time.h>
 
 #include <sys/wait.h>
 #include <sys/stat.h>
+#include <sys/ioctl.h>
 
 enum bool {
 	false,
@@ -48,6 +50,7 @@ enum pipes {
 
 char *src, *dst;
 unsigned int bs;
+unsigned int bar_width;
 char smart_mode, show_progress;
 char null_char;
 
@@ -97,11 +100,31 @@ parse_arg(char *arg) {
 }
 
 void
+set_bar_width() {
+  struct winsize w;
+  ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+
+  bar_width = (w.ws_col < 80 ? w.ws_col : 80) - 8;
+}
+
+void
+handle_winch(int sig) {
+  set_bar_width();
+}
+
+void
 open_fd(int *fd_src, int *fd_dst_r, int *fd_dst_w) {
 	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+	show_progress = 0;
+	smart_mode = 0;
 
 	*fd_src = (src ? open(src, O_RDONLY) : STDIN_FILENO);
-	smart_mode = 0;
+	if (*fd_src != STDIN_FILENO) {
+		show_progress = 1;
+		set_bar_width();
+
+		signal(SIGWINCH, handle_winch);
+	}
 
 	if (*fd_src == -1) {
 		fatal(2, "Cannot open %s", src);
@@ -111,7 +134,7 @@ open_fd(int *fd_src, int *fd_dst_r, int *fd_dst_w) {
 		*fd_dst_w = STDOUT_FILENO;
 	} else {
 		if (access(dst, F_OK) != -1) {
-			printf("in smart mode\n");
+			printf("[+] smart mode\n");
 			smart_mode = 1;
 		}
 
@@ -125,6 +148,31 @@ open_fd(int *fd_src, int *fd_dst_r, int *fd_dst_w) {
 }
 
 void
+la_barra(ssize_t blocks, ssize_t size) {
+  double perc;
+  static time_t old_time = 0;
+  time_t new_time;
+
+  new_time = time(NULL);
+
+  if (new_time == old_time)
+	  return;
+  
+  perc = ((double) ((blocks * bs) / (double) size));
+
+  fprintf(stderr, "\r|");
+  for (int i = 0; i < perc * bar_width; i++) 
+	  fprintf(stderr, "=");
+  for (int i = 0; i < bar_width - perc * bar_width; i++)
+	    fprintf(stderr, " ");
+
+  fprintf(stderr, "| %d %%", (int) (perc * 100));
+  fflush(stderr);
+
+  old_time = new_time;
+}
+
+void
 src_reader(int fd_src, int d2s_buf_r, int d2s_ctl_w, 
     int s2d_ctl_r, int s2d_buf_w) {
 
@@ -132,16 +180,24 @@ src_reader(int fd_src, int d2s_buf_r, int d2s_ctl_w,
 	ssize_t blocks;
 	ssize_t count, count2;
 
+	ssize_t size;
+	struct stat stat_src;
+
 	int dr_running = 1;
 
 	buf_src = malloc(bs * sizeof(char));
 	buf_dst = malloc(bs * sizeof(char));
 
 	blocks = 0;
+	fstat(fd_src, &stat_src);
+	size = stat_src.st_size;
+
 
 	while ((count = read(fd_src, buf_src, bs)) > 0) {
 		char diff;
 		diff = true;
+
+		la_barra(blocks, size);
 
 		if (dr_running && smart_mode) {
 
@@ -150,12 +206,10 @@ src_reader(int fd_src, int d2s_buf_r, int d2s_ctl_w,
 
 			if (count != count2) {
 				dr_running = 0;
-				printf("[+] quitting smart mode at block: %d\n", (int) blocks);
 			} else {
 				diff = false;
 				for (ssize_t i = 0; i < count; i++) {
 					if (buf_src[i] != buf_dst[i]) {
-						printf("[+] diff at block: %d\n", (int) blocks);
 						diff = true;
 						break;
 					}
@@ -269,6 +323,7 @@ main(int argc, char *argv[]) {
 	}
 
 	waitpid(child2, NULL, 0);
+	fprintf(stderr, "\n");
 
 	return 0;
 }
