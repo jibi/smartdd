@@ -101,15 +101,15 @@ parse_arg(char *arg) {
 
 void
 set_bar_width() {
-  struct winsize w;
-  ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+	struct winsize w;
+	ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
 
-  bar_width = (w.ws_col < 80 ? w.ws_col : 80) - 8;
+	bar_width = (w.ws_col < 80 ? w.ws_col : 80) - 8;
 }
 
 void
 handle_winch(int sig) {
-  set_bar_width();
+	set_bar_width();
 }
 
 void
@@ -149,27 +149,27 @@ open_fd(int *fd_src, int *fd_dst_r, int *fd_dst_w) {
 
 void
 la_barra(ssize_t blocks, ssize_t size) {
-  double perc;
-  static time_t old_time = 0;
-  time_t new_time;
+	double perc;
+	static time_t old_time = 0;
+	time_t new_time;
 
-  new_time = time(NULL);
+	new_time = time(NULL);
 
-  if (new_time == old_time)
-	  return;
+	if (new_time == old_time)
+		return;
   
-  perc = ((double) ((blocks * bs) / (double) size));
+	perc = ((double) ((blocks * bs) / (double) size));
 
-  fprintf(stderr, "\r|");
-  for (int i = 0; i < perc * bar_width; i++) 
-	  fprintf(stderr, "=");
-  for (int i = 0; i < bar_width - perc * bar_width; i++)
-	    fprintf(stderr, " ");
+	fprintf(stderr, "\r|");
+	for (int i = 0; i < perc * bar_width; i++) 
+		fprintf(stderr, "=");
+	for (int i = 0; i < bar_width - perc * bar_width; i++)
+		fprintf(stderr, " ");
 
-  fprintf(stderr, "| %d %%", (int) (perc * 100));
-  fflush(stderr);
+	fprintf(stderr, "| %d %%", (int) (perc * 100));
+	fflush(stderr);
 
-  old_time = new_time;
+	old_time = new_time;
 }
 
 void
