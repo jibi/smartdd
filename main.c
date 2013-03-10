@@ -6,9 +6,8 @@
             DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
    TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
 
-  0. You just DO WHAT THE FUCK YOU WANT TO. 
+  0. You just DO WHAT THE FUCK YOU WANT TO.
 
-  
 */
 
 
@@ -25,6 +24,8 @@
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 
+#include <linux/fs.h>
+
 enum bool {
 	false,
 	true
@@ -32,19 +33,16 @@ enum bool {
 
 enum pipes {
 	/*
-	 * dst_reader write dst_fd content into this pipe, 
+	 * dst_reader write dst_fd content into this pipe,
 	 * src_reader read from this.
 	 */
-	D2S_BUF,
-	D2S_CTL,
+	D2S_BUF, D2S_CTL,
 
 	/*
 	 * src_reader write src_fd content into this pipe,
 	 * dst_writer read from this
 	 */
-	S2D_BUF,
-	S2D_CTL,
-
+	S2D_BUF, S2D_CTL,
 	N_PIPES
 };
 
@@ -157,11 +155,11 @@ la_barra(ssize_t blocks, ssize_t size) {
 
 	if (new_time == old_time)
 		return;
-  
+
 	perc = ((double) ((blocks * bs) / (double) size));
 
 	fprintf(stderr, "\r|");
-	for (int i = 0; i < perc * bar_width; i++) 
+	for (int i = 0; i < perc * bar_width; i++)
 		fprintf(stderr, "=");
 	for (int i = 0; i < bar_width - perc * bar_width; i++)
 		fprintf(stderr, " ");
@@ -172,8 +170,26 @@ la_barra(ssize_t blocks, ssize_t size) {
 	old_time = new_time;
 }
 
+ssize_t
+get_size(int fd) {
+	struct stat stat;
+	ssize_t size = 0;
+
+	fstat(fd, &stat);
+
+	if (S_ISBLK(stat.st_mode)) {
+	  ioctl(fd, BLKGETSIZE64, &size);
+	} else if (S_ISREG(stat.st_mode)) {
+	  size = stat.st_size;
+	} else {
+	  fatal(3, "Not a regular file or block device.");
+	}
+
+	return size;
+}
+
 void
-src_reader(int fd_src, int d2s_buf_r, int d2s_ctl_w, 
+src_reader(int fd_src, int d2s_buf_r, int d2s_ctl_w,
     int s2d_ctl_r, int s2d_buf_w) {
 
 	char *buf_src, *buf_dst;
@@ -181,7 +197,6 @@ src_reader(int fd_src, int d2s_buf_r, int d2s_ctl_w,
 	ssize_t count, count2;
 
 	ssize_t size;
-	struct stat stat_src;
 
 	int dr_running = 1;
 
@@ -189,9 +204,7 @@ src_reader(int fd_src, int d2s_buf_r, int d2s_ctl_w,
 	buf_dst = malloc(bs * sizeof(char));
 
 	blocks = 0;
-	fstat(fd_src, &stat_src);
-	size = stat_src.st_size;
-
+	size = get_size(fd_src);
 
 	while ((count = read(fd_src, buf_src, bs)) > 0) {
 		char diff;
@@ -246,7 +259,7 @@ dst_reader(int fd_dst, int d2s_ctl_r, int d2s_buf_w) {
 void
 dst_writer(int fd_src, int fd_dst, int s2d_buf_r, int s2d_ctl_w) {
 	ssize_t block;
-	struct stat stat_src, stat_dst;
+	ssize_t src_size, dst_size;
 
 	while (1) {
 		write(s2d_ctl_w, &null_char, sizeof(char));
@@ -255,19 +268,21 @@ dst_writer(int fd_src, int fd_dst, int s2d_buf_r, int s2d_ctl_w) {
 		if (read(s2d_buf_r, &block, sizeof(ssize_t)) <= 0) break;
 		lseek(fd_dst, block * bs, SEEK_SET);
 
+		printf("lolwrite\n");
+
 		/* move block from s2d pipe to dst file */
 		splice(s2d_buf_r, NULL, fd_dst, NULL, bs, 0);
 	}
 
-	fstat(fd_src, &stat_src); 
-	fstat(fd_dst, &stat_dst); 
+	src_size = get_size(fd_src);
+	dst_size = get_size(fd_dst);
 
-	if(stat_dst.st_size > stat_src.st_size) {
-		ftruncate(fd_dst, stat_src.st_size);
+	if(dst_size > src_size) {
+		ftruncate(fd_dst, src_size);
 	}
 }
 
-void 
+void
 close_pipes(int pipes[][2], enum pipes *wat, int num, int rw) {
 	for (int i = 0; i < num; i++) {
 		close(pipes[wat[i]][rw]);
@@ -283,6 +298,7 @@ main(int argc, char *argv[]) {
 	src = NULL;
 	dst = NULL;
 	bs = getpagesize();
+	child1 = child2 = -1;
 
 	for (int i = 1; i < argc; i++) {
 		parse_arg(argv[i]);
@@ -299,30 +315,36 @@ main(int argc, char *argv[]) {
 	}
 
 	child1 = fork();
-	if (child1) {
+	if (child1 == 0) {
+		close_pipes(pipes, (enum pipes []) {S2D_BUF, S2D_CTL, D2S_BUF}, 3, 0);
+		close_pipes(pipes, (enum pipes []) {S2D_BUF, S2D_CTL, D2S_CTL}, 3, 1);
 
+		dst_reader(fd_dst_r, pipes[D2S_CTL][0], pipes[D2S_BUF][1]);
+
+	} else if (child1 > 0) {
 		child2 = fork();
-		if (child2) {
-			close_pipes(pipes, (enum pipes []) {D2S_CTL, S2D_BUF}, 2, 0);
-			close_pipes(pipes, (enum pipes []) {D2S_BUF, S2D_CTL}, 2, 1);
-
-			src_reader(fd_src, pipes[D2S_BUF][0], pipes[D2S_CTL][1], 
-			    pipes[S2D_CTL][0], pipes[S2D_BUF][1]);
-		} else {
+		if (child2 == 0) {
 			close_pipes(pipes, (enum pipes []) {S2D_CTL, D2S_BUF, D2S_CTL}, 3, 0);
 			close_pipes(pipes, (enum pipes []) {S2D_BUF, D2S_BUF, D2S_CTL}, 3, 1);
 
 			dst_writer(fd_src, fd_dst_w, pipes[S2D_BUF][0], pipes[S2D_CTL][1]);
+		} else if (child2 > 0) {
+			close_pipes(pipes, (enum pipes []) {D2S_CTL, S2D_BUF}, 2, 0);
+			close_pipes(pipes, (enum pipes []) {D2S_BUF, S2D_CTL}, 2, 1);
+
+			src_reader(fd_src, pipes[D2S_BUF][0], pipes[D2S_CTL][1],
+			    pipes[S2D_CTL][0], pipes[S2D_BUF][1]);
+		} else {
+		  fatal(4, "Cannot fork()");
 		}
 
 	} else {
-		close_pipes(pipes, (enum pipes []) {S2D_BUF, S2D_CTL, D2S_BUF}, 3, 0);
-		close_pipes(pipes, (enum pipes []) {S2D_BUF, S2D_CTL, D2S_CTL}, 3, 1);
-
-		dst_reader(fd_dst_r, pipes[D2S_CTL][0], pipes[D2S_BUF][1]); 
+	  fatal(4, "Cannot fork()");
 	}
 
 	waitpid(child2, NULL, 0);
+	close(fd_dst_w);
+
 	fprintf(stderr, "\n");
 
 	return 0;
