@@ -241,6 +241,7 @@ src_reader(int fd_src, int d2s_buf_r, int d2s_ctl_w,
 		blocks++;
 	}
 
+	la_barra(blocks, size);
 	close(s2d_buf_w);
 }
 
@@ -268,11 +269,10 @@ dst_writer(int fd_src, int fd_dst, int s2d_buf_r, int s2d_ctl_w) {
 		if (read(s2d_buf_r, &block, sizeof(ssize_t)) <= 0) break;
 		lseek(fd_dst, block * bs, SEEK_SET);
 
-		printf("lolwrite\n");
-
 		/* move block from s2d pipe to dst file */
 		splice(s2d_buf_r, NULL, fd_dst, NULL, bs, 0);
 	}
+
 
 	src_size = get_size(fd_src);
 	dst_size = get_size(fd_dst);
@@ -280,6 +280,8 @@ dst_writer(int fd_src, int fd_dst, int s2d_buf_r, int s2d_ctl_w) {
 	if(dst_size > src_size) {
 		ftruncate(fd_dst, src_size);
 	}
+
+	close(fd_dst);
 }
 
 void
@@ -342,8 +344,8 @@ main(int argc, char *argv[]) {
 	  fatal(4, "Cannot fork()");
 	}
 
+	waitpid(child1, NULL, 0);
 	waitpid(child2, NULL, 0);
-	close(fd_dst_w);
 
 	fprintf(stderr, "\n");
 
