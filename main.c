@@ -111,20 +111,20 @@ handle_winch(int sig) {
 }
 
 void
-open_fd(int *fd_src, int *fd_dst_r, int *fd_dst_w) {
+open_fd(int *fd_src_r, int *fd_dst_r, int *fd_dst_w) {
 	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
 	show_progress = 0;
 	smart_mode = 0;
 
-	*fd_src = (src ? open(src, O_RDONLY) : STDIN_FILENO);
-	if (*fd_src != STDIN_FILENO) {
+	*fd_src_r = (src ? open(src, O_RDONLY) : STDIN_FILENO);
+	if (*fd_src_r != STDIN_FILENO) {
 		show_progress = 1;
 		set_bar_width();
 
 		signal(SIGWINCH, handle_winch);
 	}
 
-	if (*fd_src == -1) {
+	if (*fd_src_r == -1) {
 		fatal(2, "Cannot open %s", src);
 	}
 
@@ -189,7 +189,7 @@ get_size(int fd) {
 }
 
 void
-src_reader(int fd_src, int d2s_buf_r, int d2s_ctl_w,
+src_reader(int fd_src_r, int d2s_buf_r, int d2s_ctl_w,
     int s2d_ctl_r, int s2d_buf_w) {
 
 	char *buf_src, *buf_dst;
@@ -204,9 +204,9 @@ src_reader(int fd_src, int d2s_buf_r, int d2s_ctl_w,
 	buf_dst = malloc(bs * sizeof(char));
 
 	blocks = 0;
-	size = get_size(fd_src);
+	size = get_size(fd_src_r);
 
-	while ((count = read(fd_src, buf_src, bs)) > 0) {
+	while ((count = read(fd_src_r, buf_src, bs)) > 0) {
 		char diff;
 		diff = true;
 
@@ -246,9 +246,9 @@ src_reader(int fd_src, int d2s_buf_r, int d2s_ctl_w,
 }
 
 void
-dst_reader(int fd_dst, int d2s_ctl_r, int d2s_buf_w) {
+dst_reader(int fd_dst_r, int d2s_ctl_r, int d2s_buf_w) {
 	/* move a block from dst file to d2s_buf pipe */
-	while (splice(fd_dst, NULL, d2s_buf_w, NULL, bs, 0) > 0) {
+	while (splice(fd_dst_r, NULL, d2s_buf_w, NULL, bs, 0) > 0) {
 
 		/* wait src reader to read next block */
 		read(d2s_ctl_r, &null_char, sizeof(char));
@@ -258,7 +258,7 @@ dst_reader(int fd_dst, int d2s_ctl_r, int d2s_buf_w) {
 }
 
 void
-dst_writer(int fd_src, int fd_dst, int s2d_buf_r, int s2d_ctl_w) {
+dst_writer(int fd_src_r, int fd_dst_w, int s2d_buf_r, int s2d_ctl_w) {
 	ssize_t block;
 	ssize_t src_size, dst_size;
 
@@ -267,21 +267,21 @@ dst_writer(int fd_src, int fd_dst, int s2d_buf_r, int s2d_ctl_w) {
 
 		/* read current block */
 		if (read(s2d_buf_r, &block, sizeof(ssize_t)) <= 0) break;
-		lseek(fd_dst, block * bs, SEEK_SET);
+		lseek(fd_dst_w, block * bs, SEEK_SET);
 
 		/* move block from s2d pipe to dst file */
-		splice(s2d_buf_r, NULL, fd_dst, NULL, bs, 0);
+		splice(s2d_buf_r, NULL, fd_dst_w, NULL, bs, 0);
 	}
 
 
-	src_size = get_size(fd_src);
-	dst_size = get_size(fd_dst);
+	src_size = get_size(fd_src_r);
+	dst_size = get_size(fd_dst_w);
 
 	if(dst_size > src_size) {
-		ftruncate(fd_dst, src_size);
+		ftruncate(fd_dst_w, src_size);
 	}
 
-	close(fd_dst);
+	close(fd_dst_w);
 }
 
 void
@@ -293,7 +293,7 @@ close_pipes(int pipes[][2], enum pipes *wat, int num, int rw) {
 
 int
 main(int argc, char *argv[]) {
-	int fd_src, fd_dst_r, fd_dst_w;
+	int fd_src_r, fd_dst_r, fd_dst_w;
 	int pipes[N_PIPES][2];
 	pid_t child1, child2;
 
@@ -310,7 +310,7 @@ main(int argc, char *argv[]) {
 		fatal(1, "Block size cannot be 0");
 	}
 
-	open_fd(&fd_src, &fd_dst_r, &fd_dst_w);
+	open_fd(&fd_src_r, &fd_dst_r, &fd_dst_w);
 
 	for (int i = 0; i < N_PIPES; i++) {
 		pipe(pipes[i]);
@@ -329,12 +329,12 @@ main(int argc, char *argv[]) {
 			close_pipes(pipes, (enum pipes []) {S2D_CTL, D2S_BUF, D2S_CTL}, 3, 0);
 			close_pipes(pipes, (enum pipes []) {S2D_BUF, D2S_BUF, D2S_CTL}, 3, 1);
 
-			dst_writer(fd_src, fd_dst_w, pipes[S2D_BUF][0], pipes[S2D_CTL][1]);
+			dst_writer(fd_src_r, fd_dst_w, pipes[S2D_BUF][0], pipes[S2D_CTL][1]);
 		} else if (child2 > 0) {
 			close_pipes(pipes, (enum pipes []) {D2S_CTL, S2D_BUF}, 2, 0);
 			close_pipes(pipes, (enum pipes []) {D2S_BUF, S2D_CTL}, 2, 1);
 
-			src_reader(fd_src, pipes[D2S_BUF][0], pipes[D2S_CTL][1],
+			src_reader(fd_src_r, pipes[D2S_BUF][0], pipes[D2S_CTL][1],
 			    pipes[S2D_CTL][0], pipes[S2D_BUF][1]);
 		} else {
 		  fatal(4, "Cannot fork()");
