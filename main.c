@@ -136,8 +136,8 @@ open_fd(int *fd_src_r, int *fd_dst_r, int *fd_dst_w) {
 			smart_mode = 1;
 		}
 
-		*fd_dst_r = open(dst, O_RDWR | O_CREAT, mode);
-		*fd_dst_w = open(dst, O_RDWR | O_CREAT, mode);
+		*fd_dst_w = open(dst, O_WRONLY | O_CREAT, mode);
+		*fd_dst_r = open(dst, O_RDONLY, mode);
 	}
 
 	if (*fd_dst_r == -1 || *fd_dst_w == -1) {
