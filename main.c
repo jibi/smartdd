@@ -323,6 +323,7 @@ main(int argc, char *argv[]) {
 
 		dst_reader(fd_dst_r, pipes[D2S_CTL][0], pipes[D2S_BUF][1]);
 
+		return 0;
 	} else if (child1 > 0) {
 		child2 = fork();
 		if (child2 == 0) {
@@ -330,6 +331,8 @@ main(int argc, char *argv[]) {
 			close_pipes(pipes, (enum pipes []) {S2D_BUF, D2S_BUF, D2S_CTL}, 3, 1);
 
 			dst_writer(fd_src_r, fd_dst_w, pipes[S2D_BUF][0], pipes[S2D_CTL][1]);
+
+			return 0;
 		} else if (child2 > 0) {
 			close_pipes(pipes, (enum pipes []) {D2S_CTL, S2D_BUF}, 2, 0);
 			close_pipes(pipes, (enum pipes []) {D2S_BUF, S2D_CTL}, 2, 1);
