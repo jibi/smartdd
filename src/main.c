@@ -179,6 +179,13 @@ dst_reader(void *args) {
 		}
 	}
 
+	/*
+	 * XXX: optimize this. */
+	while (1) {
+		src_block = blocking_queue_dequeue(src_reader_queue);
+		blocking_queue_enqueue(dst_writer_queue, src_block);
+	}
+
 	return NULL;
 }
 
