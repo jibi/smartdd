@@ -19,7 +19,6 @@ typedef struct block_list_s {
 	char   last;
 
 	struct block_list_s *next;
-
 } block_list_t;
 
 typedef struct block_pool_s {

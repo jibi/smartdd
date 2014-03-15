@@ -15,19 +15,19 @@
 
 block_pool_t *
 new_block_pool(size_t size, size_t count) {
-	int i;
 	block_pool_t *bp = malloc(sizeof(block_pool_t));
-	block_list_t *b;
 
-	bp->free_blocks = malloc(size * sizeof(block_list_t));
-	bp->blocks      = malloc(size * count);
+	bp->free_blocks = malloc(count * sizeof(block_list_t));
+	bp->blocks      = malloc(count * size * sizeof(unsigned char));
 	bp->size        = size;
 	bp->count       = count;
 
-	for (i = 0; i < count; i++) {
+	block_list_t *b;
+
+	for (int i = 0; i < count; i++) {
 		b        = bp->free_blocks + i;
 		b->next  = b + 1;
-		b->block = bp->blocks + i;
+		b->block = bp->blocks + i * size;
 	}
 
 	b->next = NULL;
