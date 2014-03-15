@@ -13,7 +13,7 @@
 #include <unistd.h>
 
 typedef struct block_list_s {
-	void   *block;
+	unsigned char *block;
 	size_t n;
 	size_t size;
 	char   last;
@@ -26,8 +26,8 @@ typedef struct block_pool_s {
 	size_t size;
 	size_t count;
 
-	void **blocks;
-	block_list_t *free_blocks;
+	unsigned char *blocks;
+	block_list_t  *free_blocks;
 } block_pool_t;
 
 
