@@ -187,7 +187,7 @@ dst_writer(void *args) {
 		last_block = block->last;
 
 		if (!last_block) {
-			lseek(fd_dst_w, block->n * block->size, SEEK_SET);
+			lseek(fd_dst_w, block->n * state.block_size, SEEK_SET);
 			write(fd_dst_w, block->block, block->size);
 		}
 
