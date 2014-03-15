@@ -143,6 +143,7 @@ src_reader(void *args) {
 	block_list_t *block = get_new_block(src_block_pool);
 
 	while ((block_size = read(fd_src_r, block->block, state.block_size))) {
+
 		block->n    = block_n++;
 		block->last = 0;
 		block->size = block_size;
@@ -160,15 +161,21 @@ src_reader(void *args) {
 void *
 dst_reader(void *args) {
 	block_list_t *src_block;
+
 	block_list_t *dst_block = malloc(sizeof(block_list_t));
+	dst_block->block        = malloc(state.block_size);
 
 	while (read(fd_dst_r, dst_block->block, state.block_size)) {
-		src_block  = blocking_queue_dequeue(src_reader_queue);
+		src_block = blocking_queue_dequeue(src_reader_queue);
 
-		if ((state.smart_mode && !memcmp(src_block->block, dst_block->block, src_block->size)) || src_block->last) {
-			blocking_queue_enqueue(dst_writer_queue, src_block);
+		if (state.smart_mode) {
+			if (memcmp(src_block->block, dst_block->block, src_block->size) || src_block->last) {
+				blocking_queue_enqueue(dst_writer_queue, src_block);
+			} else {
+				release_block(src_block_pool, src_block);
+			}
 		} else {
-			release_block(src_block_pool, src_block);
+			blocking_queue_enqueue(dst_writer_queue, src_block);
 		}
 	}
 
