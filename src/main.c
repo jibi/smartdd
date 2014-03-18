@@ -26,8 +26,8 @@
 #include <queue.h>
 #include <block_allocator.h>
 
-/* XXX: try different count sizes */
-#define COUNT 1024
+#define MAX_PREALLOCATED_BLOCKS 1024
+#define MAX_PREALLOCATED_MEMORY 16777216 // 16 MB
 
 int fd_src_r, fd_dst_r, fd_dst_w;
 
@@ -136,6 +136,21 @@ parse_arg(char *arg) {
 	}
 }
 
+size_t
+calculate_preallocated_blocks() {
+	size_t blocks = MAX_PREALLOCATED_MEMORY / state.block_size;
+
+	if (!blocks) {
+		fatal(4, "Cannot allocate any block, try a smaller size.");
+	}
+
+	if (blocks > MAX_PREALLOCATED_BLOCKS) {
+		blocks = MAX_PREALLOCATED_BLOCKS;
+	}
+
+	return blocks;
+}
+
 void *
 src_reader(void *args) {
 	size_t block_n = 0;
@@ -222,6 +237,8 @@ dst_writer(void *args) {
 
 int
 main(int argc, char *argv[]) {
+	size_t prealloc_blocks;
+
 	state.src_filename = NULL;
 	state.dst_filename = NULL;
 	state.block_size   = getpagesize();
@@ -236,9 +253,11 @@ main(int argc, char *argv[]) {
 		fatal(1, "Block size cannot be 0");
 	}
 
-	src_reader_queue = new_blocking_queue(COUNT + 1, 0);
-	dst_writer_queue = new_blocking_queue(COUNT + 1, 0);
-	src_block_pool   = new_block_pool(state.block_size, COUNT);
+	prealloc_blocks = calculate_preallocated_blocks();
+
+	src_reader_queue = new_blocking_queue(prealloc_blocks + 1, 0);
+	dst_writer_queue = new_blocking_queue(prealloc_blocks + 1, 0);
+	src_block_pool   = new_block_pool(state.block_size, prealloc_blocks);
 
 	pthread_create(&src_reader_thread, NULL, src_reader, NULL);
 	pthread_create(&dst_reader_thread, NULL, dst_reader, NULL);
