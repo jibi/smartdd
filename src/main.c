@@ -138,7 +138,7 @@ parse_arg(char *arg) {
 
 size_t
 calculate_preallocated_blocks() {
-	size_t blocks = MAX_PREALLOCATED_MEMORY / state.block_size;
+	size_t blocks = MAX_PREALLOCATED_MEMORY / (state.block_size * 2);
 
 	if (!blocks) {
 		fatal(4, "Cannot allocate any block, try a smaller size.");
@@ -255,9 +255,9 @@ main(int argc, char *argv[]) {
 
 	prealloc_blocks = calculate_preallocated_blocks();
 
-	src_reader_queue = new_blocking_queue(prealloc_blocks + 1, 0);
-	dst_writer_queue = new_blocking_queue(prealloc_blocks + 1, 0);
-	src_block_pool   = new_block_pool(state.block_size, prealloc_blocks);
+	src_reader_queue = new_blocking_queue(prealloc_blocks, 0);
+	dst_writer_queue = new_blocking_queue(prealloc_blocks, 0);
+	src_block_pool   = new_block_pool(state.block_size, 2 * prealloc_blocks + 3);
 
 	pthread_create(&src_reader_thread, NULL, src_reader, NULL);
 	pthread_create(&dst_reader_thread, NULL, dst_reader, NULL);
